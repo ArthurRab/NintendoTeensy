@@ -22,6 +22,7 @@ THE SOFTWARE.
 */
 
 #include "Gamecube.h"
+#include "Gamecube_N64.c"
 
 //================================================================================
 // Gamecube Controller
@@ -33,13 +34,11 @@ bool gc_init(const uint8_t pin, Gamecube_Status_t* status)
     // This is unnecessary for a standard controller, but is required for the
     // Wavebird.
     uint8_t command[] = { 0x00 };
-
     // Send the command and read in data
-    uint8_t receivedBytes = gc_n64_send_get(pin, command, sizeof(command), (uint8_t*)status, sizeof(Gamecube_Status_t));
-
+    uint8_t receivedBytes = gc_n64_send_get(pin, command, sizeof(command), (uint8_t*)status, 3);
     // Return status information for optional use.
     // On error the report may have been modified!
-    return (receivedBytes == sizeof(Gamecube_Status_t));
+    return (receivedBytes == 3);
 }
 
 
@@ -52,27 +51,26 @@ bool gc_origin(const uint8_t pin, Gamecube_Origin_t* origin)
     uint8_t command[] = { 0x41 };
 
     // Send the command and read in data
-    uint8_t receivedBytes = gc_n64_send_get(pin, command, sizeof(command), (uint8_t*)origin, sizeof(Gamecube_Origin_t));
+    uint8_t receivedBytes2 = gc_n64_send_get(pin, command, sizeof(command), (uint8_t*)origin, 10);
 
     // Return status information for optional use.
     // On error the report may have been modified!
-    return (receivedBytes == sizeof(Gamecube_Origin_t));
+    return (receivedBytes2 == 10);
 }
 
 
 bool gc_read(const uint8_t pin, Gamecube_Report_t* report, const bool rumble)
 {
-    // Command to send to the gamecube, LSB is rumble
+    // Command to send to the gamecube controller, LSB is rumble
     uint8_t command[] = { 0x40, 0x03, rumble };
 
     // Send the command and read in data
-    uint8_t receivedBytes = gc_n64_send_get(pin, command, sizeof(command), (uint8_t*)report, sizeof(Gamecube_Report_t));
+    uint8_t receivedBytes = gc_n64_send_get(pin, command, sizeof(command), (uint8_t*)report, 8);
 
     // Return status information for optional use.
     // On error the report may have been modified!
-    return (receivedBytes == sizeof(Gamecube_Report_t));
+    return (receivedBytes == 8);
 }
-
 
 //================================================================================
 // Gamecube Console
@@ -131,32 +129,22 @@ uint8_t gc_write(const uint8_t pin, Gamecube_Status_t* status, Gamecube_Origin_t
     // 0 = no input/error, 1 = init, 2 = origin, 3 = read, 4 = read with rumble
     uint8_t ret = 0;
 
-    // Get the port mask and the pointers to the in/out/mode registers
-    uint8_t bitMask = digitalPinToBitMask(pin);
-    uint8_t port = digitalPinToPort(pin);
-    volatile uint8_t* modePort = portModeRegister(port);
-    volatile uint8_t* outPort = portOutputRegister(port);
-    volatile uint8_t* inPort = portInputRegister(port);
-
-    // Don't want interrupts getting in the way
-    uint8_t oldSREG = SREG;
-    cli();
 
     // Read in data from the console
     // After receiving the init command you have max 80us to respond (for the data command)!
     uint8_t command[3];
-    uint8_t receivedBytes = gc_n64_get(command, sizeof(command), modePort, outPort, inPort, bitMask);
+    uint8_t receivedBytes = gc_n64_get(command, sizeof(command), pin, 10000);
 
     // Init or reset
     if (receivedBytes == 1 && (command[0] == 0x00 || command[0] == 0xFF))
     {
-        gc_n64_send(status->raw8, sizeof(Gamecube_Status_t), modePort, outPort, bitMask);
+        gc_n64_send(status->raw8, 3, pin);
         ret = 1;
     }
     // Get origin or recalibrate
     else if (receivedBytes == 1 && (command[0] == 0x41 || command[0] == 0x42))
     {
-        gc_n64_send(origin->raw8, sizeof(Gamecube_Origin_t), modePort, outPort, bitMask);
+        gc_n64_send(origin->raw8, 10, pin);
         ret = 2;
     }
     // Get data. Do not check last byte (command[2]), as the flags are unknown
@@ -164,7 +152,8 @@ uint8_t gc_write(const uint8_t pin, Gamecube_Status_t* status, Gamecube_Origin_t
     {
         Gamecube_Report_t dest_report;
         gc_report_convert(report, &dest_report, command[1]);
-        gc_n64_send(dest_report.raw8, sizeof(dest_report), modePort, outPort, bitMask);
+        delayMicroseconds(10);
+        gc_n64_send(dest_report.raw8, sizeof(dest_report), pin);
         ret = 3;
         // The first byte probably flags a gamecube reading (0x40), as the same
         // protocol is also used for N64. The lower nibble seems to be the mode:
@@ -201,7 +190,6 @@ uint8_t gc_write(const uint8_t pin, Gamecube_Status_t* status, Gamecube_Origin_t
     }
 
     // End of time sensitive code
-    SREG = oldSREG;
 
     return ret;
 }

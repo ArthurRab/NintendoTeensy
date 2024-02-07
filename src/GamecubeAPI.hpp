@@ -23,7 +23,7 @@ THE SOFTWARE.
 
 // Include guard
 #pragma once
-
+#include "Gamecube.c"
 //================================================================================
 // Gamecube Controller API
 //================================================================================
@@ -49,7 +49,7 @@ bool CGamecubeController::begin(void)
         reset();
         return false;
     }
-
+    delayMicroseconds(20);
     // If initialization was successful also get the original controller stats
     if (!gc_origin(pin, &origin))
     {
@@ -85,6 +85,7 @@ bool CGamecubeController::read(void)
         {
             return false;
         }
+        delayMicroseconds(20);
     }
 
     // Read the controller, abort if it fails.
@@ -182,13 +183,12 @@ bool CGamecubeConsole::write(Gamecube_Data_t &data)
 {
     // Abort if controller was not initialized.
     // Gamecube will refuse and weird connect/disconnect errors will occur.
+    /*
     if (data.report.origin) {
         return false;
-    }
+        }
+    */
 
-    // Don't want interrupts getting in the way
-    uint8_t oldSREG = SREG;
-    cli();
 
     // Write a respond to the gamecube, depending on what it requests
     uint8_t ret = gc_write(pin, &data.status, &data.origin, &data.report);
@@ -206,8 +206,6 @@ bool CGamecubeConsole::write(Gamecube_Data_t &data)
         ret = gc_write(pin, &data.status, &data.origin, &data.report);
     }
 
-    // End of time sensitive code
-    SREG = oldSREG;
 
     // Set rumble depending on read return value
     if (ret == 3) {
@@ -222,7 +220,6 @@ bool CGamecubeConsole::write(Gamecube_Data_t &data)
         data.status.rumble = false;
         return true;
     }
-
     // Return error if no reading was possible
     return false;
 }

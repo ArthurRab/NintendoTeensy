@@ -164,9 +164,7 @@ CN64Console::CN64Console(const uint8_t p) : pin(p){
 
 bool CN64Console::write(N64_Data_t &data)
 {
-    // Don't want interrupts getting in the way
-    uint8_t oldSREG = SREG;
-    cli();
+
 
     // Write a respond to the N64, depending on what it requests
     uint8_t ret = n64_write(pin, &data.status, &data.report);
@@ -178,8 +176,7 @@ bool CN64Console::write(N64_Data_t &data)
         ret = n64_write(pin, &data.status, &data.report);
     }
 
-    // End of time sensitive code
-    SREG = oldSREG;
+
 
     // Return error if no reading was possible
     return false;

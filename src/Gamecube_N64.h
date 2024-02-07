@@ -33,7 +33,7 @@ THE SOFTWARE.
 typedef union{
     // 3 bytes of statusreport that we get from the controller
     uint8_t raw8[3];
-    uint16_t raw16[0];
+    //uint16_t raw16[0];
     struct {
         // Device information, needs to be swapped to fit the documentation below:
         // 15 wireless (1: wireless Controller)
@@ -78,12 +78,10 @@ extern "C" {
 uint8_t gc_n64_send_get(const uint8_t pin, uint8_t* command, const uint8_t commandLen,
     uint8_t* report, const uint8_t reportLen) __attribute__((noinline));
 
-void gc_n64_send(const uint8_t* buff, uint8_t len,
-    volatile uint8_t* modePort, volatile uint8_t* outPort, uint8_t bitMask)
+void gc_n64_send(const uint8_t* buff, uint8_t len, const uint8_t pin)
     __attribute__((noinline));
 
-uint8_t gc_n64_get(uint8_t* buff, uint8_t len,
-    volatile uint8_t* modePort, volatile uint8_t* outPort, volatile uint8_t * inPort, uint8_t bitMask)
+uint8_t gc_n64_get(uint8_t* buff, uint8_t len, const uint8_t pin, int initial_timeout)
     __attribute__((noinline));
 
 #ifdef __cplusplus
