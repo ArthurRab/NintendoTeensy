@@ -29,12 +29,25 @@ THE SOFTWARE.
 
 uint8_t gc_n64_send_get(const uint8_t pin, uint8_t* command, const uint8_t commandLen,
     uint8_t* report, const uint8_t reportLen){
+    ARM_DEMCR |= ARM_DEMCR_TRCENA;
+    ARM_DWT_CTRL |= ARM_DWT_CTRL_CYCCNTENA;
+
+    uint32_t interruptState;
+    __asm__ volatile(
+        "mrs %0, primask\n\t"
+        "cpsid i"
+        : "=r" (interruptState)
+        :
+        : "memory");
+
     // send the command
     gc_n64_send(command, commandLen, pin);
     // read in data
     uint8_t receivedBytes = gc_n64_get(report, reportLen, pin, 100);
 
-    // end of time sensitive code
+    if ((interruptState & 1U) == 0U) {
+        __asm__ volatile("cpsie i" : : : "memory");
+    }
 
     // return received length
     return receivedBytes;
@@ -42,11 +55,21 @@ uint8_t gc_n64_send_get(const uint8_t pin, uint8_t* command, const uint8_t comma
 
 #define debug false
 
+static inline uint32_t microseconds_to_cycles(uint32_t microseconds){
+  return microseconds * (F_CPU_ACTUAL / 1000000U);
+}
+
 bool wait_for_edge(uint8_t pin, uint8_t dir, int timeout){
-  auto start = micros();
-  auto limit = start + timeout;
-  while(digitalRead(pin) == dir && micros() <= limit);
-  return (micros() <= limit);
+  const uint32_t start = ARM_DWT_CYCCNT;
+  const uint32_t timeoutCycles = microseconds_to_cycles(timeout);
+
+  while(digitalReadFast(pin) == dir){
+    if ((uint32_t)(ARM_DWT_CYCCNT - start) >= timeoutCycles){
+      return false;
+    }
+  }
+
+  return true;
 }
 
 bool wait_for_down_edge(uint8_t pin, int timeout){
@@ -64,16 +87,17 @@ bool wait_for_up_edge(uint8_t pin, int timeout){
 }
 
 uint8_t read_bit(uint8_t pin, int timeout){
-  auto worked = wait_for_down_edge(pin,timeout);
-  int start = micros();
-  worked = worked && wait_for_up_edge(pin,timeout);
-  int end = micros();
-
-  if (!worked){
+  if (!wait_for_down_edge(pin, timeout)){
     return 2;
   }
 
-  return (end - start <= 2);
+  const uint32_t lowStart = ARM_DWT_CYCCNT;
+  if (!wait_for_up_edge(pin, timeout)){
+    return 2;
+  }
+  const uint32_t lowCycles = ARM_DWT_CYCCNT - lowStart;
+
+  return lowCycles <= microseconds_to_cycles(2);
 }
 
 void write_bit(uint8_t pin, bool bit){
